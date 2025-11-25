@@ -5,6 +5,7 @@ This was the original version. I've added send & post to both SyncAPIClient & As
 
 import json
 import asyncio
+import os
 from typing import Dict, List, Optional, Any, AsyncIterator, Union, Iterator
 
 from .base import SyncHTTPClient, AsyncHTTPClient, ConnectionPool, RetryConfig
@@ -25,21 +26,35 @@ class APIExecutor:
     subclass that manages message history and chat-specific data formatting.
     """
 
-    def __init__(self, api_key: str, base_url: str, model: str, 
+    def __init__(self, api_key: str, base_url: str, model: str,
                  endpoint: str = "chat/completions",
                  temperature: float = 0.7,
                  max_completion_tokens: int = 100,
-                 timeout: float = 30.0):
+                 timeout: float = 30.0,
+                 window_id: Optional[int] = None):
         self.api_key = api_key
         self.base_url = base_url.rstrip('/')
         self.model = model
         self.endpoint = endpoint.rstrip('/').lstrip('/')
         self.timeout = timeout
+        self.window_id = window_id
+        self.conversation_dumped = False
 
         # LLM-specific parameters
         self.temperature = temperature
         self.max_completion_tokens = max_completion_tokens
         self.messages = []
+
+    def _get_conversation_file_path(self) -> Optional[str]:
+        if self.window_id is None:
+            return None
+
+        # Temp directory for conversation files
+        storage_path = os.path.join(os.path.expanduser("~"), ".llm_plugin_conversations")
+        if not os.path.exists(storage_path):
+            os.makedirs(storage_path)
+
+        return os.path.join(storage_path, f"conversation_{self.window_id}.json")
 
     def set_parameters(self, model: Optional[str] = None,
                       temperature: Optional[float] = None,
@@ -56,12 +71,38 @@ class APIExecutor:
         """Clear the message history."""
         self.messages = []
 
+        file_path = self._get_conversation_file_path()
+        if file_path and os.path.exists(file_path):
+            os.remove(file_path)
+
+    def dump_conversation(self):
+        """Dump the current conversation to a file."""
+        self.conversation_dumped = True
+        file_path = self._get_conversation_file_path()
+        if file_path:
+            with open(file_path, 'w') as f:
+                json.dump(self.messages, f, indent=4)
+
     def add_message(self, role: str, content: str):
         """Add a message to the conversation history."""
-        self.messages.append({"role": role, "content": content})
+        message = {"role": role, "content": content}
+        self.messages.append(message)
+
+        if self.conversation_dumped:
+            file_path = self._get_conversation_file_path()
+            if file_path:
+                with open(file_path, 'w') as f:
+                    json.dump(self.messages, f, indent=4)
+
 
     def prepare_request_data(self, prompt: Union[str, List[Dict[str, str]]], stream: bool = False) -> Dict[str, Any]:
         """Prepare the request data for the API call."""
+        file_path = self._get_conversation_file_path()
+
+        if self.conversation_dumped and file_path and os.path.exists(file_path):
+            with open(file_path, 'r') as f:
+                self.messages = json.load(f)
+
         if isinstance(prompt, str):
             # Add user message to history
             self.add_message("user", prompt)
@@ -153,10 +194,11 @@ class SyncAPIClient:
                  http_client: Optional[SyncHTTPClient] = None,
                  middleware: Optional[List[BaseMiddleware]] = None,
                  connection_pool: Optional[ConnectionPool] = None,
-                 retry_config: Optional[RetryConfig] = None):
+                 retry_config: Optional[RetryConfig] = None,
+                 window_id: Optional[int] = None):
 
         self._executor = APIExecutor(
-            api_key, base_url, model, endpoint, temperature, max_completion_tokens, timeout
+            api_key, base_url, model, endpoint, temperature, max_completion_tokens, timeout, window_id
         )
 
         # Use provided client or create a new one
@@ -273,10 +315,11 @@ class AsyncAPIClient:
                 http_client: Optional[AsyncHTTPClient] = None,
                 middleware: Optional[List[BaseMiddleware]] = None,
                 connection_pool: Optional[ConnectionPool] = None,
-                retry_config: Optional[RetryConfig] = None):
+                 retry_config: Optional[RetryConfig] = None,
+                 window_id: Optional[int] = None):
 
         self._executor = APIExecutor(
-            api_key, base_url, model, endpoint, temperature, max_completion_tokens, timeout
+            api_key, base_url, model, endpoint, temperature, max_completion_tokens, timeout, window_id
         )
 
         # Use provided client or create a new one
