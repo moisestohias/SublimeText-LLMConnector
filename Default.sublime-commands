@@ -1,0 +1,22 @@
+[
+    {
+        "caption": "LLM: Query Selected Text",
+        "command": "llm_query"
+    },
+    {
+        "caption": "LLM: Chat",
+        "command": "llm_chat"
+    },
+    {
+        "caption": "LLM: Read Aloud Selected Text",
+        "command": "llm_tts"
+    },
+    {
+        "caption": "LLM: Reset Conversation",
+        "command": "llm_reset_conversation"
+    },
+    {
+        "caption": "LLM: Reset Client",
+        "command": "llm_reset_client"
+    }
+]

@@ -1,0 +1,13 @@
+{
+    "client_config": {
+        "api_key": "",
+        "base_url": "",
+        "model": "moonshotai/kimi-k2-instruct-0905",
+        // "model": "meta-llama/llama-4-maverick-17b-128e-instruct",
+        "temperature": 0.7,
+        "max_completion_tokens": 4000,
+        "timeout": 30,
+        "endpoint": ""
+    },
+    "delimiter": "==="
+}
