@@ -17,6 +17,7 @@ def _get_or_create_client(window):
     if window_id not in _window_clients or _window_clients[window_id] is None:
         settings = sublime.load_settings('LLMPlugin.sublime-settings')
         client_config = settings.get('client_config', {})
+        client_config['window_id'] = window_id
         _window_clients[window_id] = create_groq_sync_client(**client_config)
     
     return _window_clients[window_id]
@@ -175,6 +176,19 @@ class LlmResetConversationCommand(sublime_plugin.ApplicationCommand):
             
         except Exception as e:
             sublime.error_message('LLM Reset Error: {0}'.format(str(e)))
+
+class LlmDumpConversationCommand(sublime_plugin.ApplicationCommand):
+    def run(self):
+        try:
+            window = sublime.active_window()
+            client = _get_or_create_client(window)
+
+            client._executor.dump_conversation()
+
+            sublime.status_message('LLM conversation dumped to file')
+
+        except Exception as e:
+            sublime.error_message('LLM Dump Error: {0}'.format(str(e)))
 
 class LlmEventListener(sublime_plugin.EventListener):
     def on_close(self, view):
