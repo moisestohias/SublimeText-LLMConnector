@@ -18,5 +18,9 @@
     {
         "caption": "LLM: Reset Client",
         "command": "llm_reset_client"
+    },
+    {
+        "caption": "LLM: Dump Conversation",
+        "command": "llm_dump_conversation"
     }
 ]

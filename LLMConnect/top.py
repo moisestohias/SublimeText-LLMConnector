@@ -5,12 +5,16 @@ This was the original version. I've added send & post to both SyncAPIClient & As
 
 import json
 import asyncio
+import os
+import sublime
 from typing import Dict, List, Optional, Any, AsyncIterator, Union, Iterator
 
 from .base import SyncHTTPClient, AsyncHTTPClient, ConnectionPool, RetryConfig
 from .middlewares import AuthenticationMiddleware, UserAgentMiddleware, LoggingMiddleware, HTTPResponse, BaseMiddleware
 
 from .utils import validate_messages_format
+
+CONVERSATION_DIR_NAME = "LLMConnect_conversations"
 user_agent: str = "APIClient/1.0.0"
 
 
@@ -29,7 +33,8 @@ class APIExecutor:
                  endpoint: str = "chat/completions",
                  temperature: float = 0.7,
                  max_completion_tokens: int = 100,
-                 timeout: float = 30.0):
+                 timeout: float = 30.0,
+                 window_id: Optional[int] = None):
         self.api_key = api_key
         self.base_url = base_url.rstrip('/')
         self.model = model
@@ -40,6 +45,66 @@ class APIExecutor:
         self.temperature = temperature
         self.max_completion_tokens = max_completion_tokens
         self.messages = []
+        self.window_id = window_id
+        self.conversation_file_path = self._get_conversation_file_path() if window_id else None
+        
+        if self.conversation_file_path:
+            self._load_conversation_from_file()
+
+    def _get_conversation_file_path(self) -> Optional[str]:
+        """Generates the conversation file path based on the window ID."""
+        if not self.window_id:
+            print("[LLMConnect] No window ID provided, cannot generate conversation file path.")
+            return None
+        cache_dir = os.path.join(sublime.cache_path(), CONVERSATION_DIR_NAME)
+        os.makedirs(cache_dir, exist_ok=True)
+        file_path = os.path.join(cache_dir, f"conversation_{self.window_id}.json")
+        print(f"[LLMConnect] Generated conversation file path: {file_path}")
+        return file_path
+
+    def _load_conversation_from_file(self):
+        """Loads conversation messages from the JSON file if it exists."""
+        if self.conversation_file_path and os.path.exists(self.conversation_file_path):
+            try:
+                with open(self.conversation_file_path, 'r', encoding='utf-8') as f:
+                    file_content = f.read()
+                    if file_content: # Only load if file is not empty
+                        loaded_messages = json.loads(file_content)
+                        if isinstance(loaded_messages, list) and all(isinstance(m, dict) for m in loaded_messages):
+                            self.messages = loaded_messages
+                        else:
+                            print(f"[LLMConnect] Warning: Invalid conversation format in {self.conversation_file_path}")
+                            self.messages = []
+                    else:
+                        self.messages = []
+            except (json.JSONDecodeError, IOError) as e:
+                print(f"[LLMConnect] Error loading conversation from {self.conversation_file_path}: {e}")
+                self.messages = []
+        else:
+            self.messages = []
+
+    def _save_conversation_to_file(self):
+        """Saves the current conversation messages to the JSON file."""
+        if self.conversation_file_path:
+            try:
+                with open(self.conversation_file_path, 'w', encoding='utf-8') as f:
+                    json.dump(self.messages, f, indent=4)
+                print(f"[LLMConnect] Conversation saved to {self.conversation_file_path}")
+            except IOError as e:
+                print(f"[LLMConnect] Error saving conversation to {self.conversation_file_path}: {e}")
+        else:
+            print("[LLMConnect] No conversation file path, skipping save.")
+
+    def dump_conversation_to_json(self):
+        """Public method to force saving the conversation to JSON."""
+        print(f"[LLMConnect] Attempting to dump conversation for window ID: {self.window_id}")
+        if not self.conversation_file_path:
+            self.conversation_file_path = self._get_conversation_file_path()
+            if not self.conversation_file_path:
+                print("[LLMConnect] Error: Cannot dump conversation without a valid conversation file path.")
+                raise RuntimeError("Cannot dump conversation without a window ID.")
+        self._save_conversation_to_file()
+        print(f"[LLMConnect] Conversation dump initiated to: {self.conversation_file_path}")
 
     def set_parameters(self, model: Optional[str] = None,
                       temperature: Optional[float] = None,
@@ -53,15 +118,26 @@ class APIExecutor:
             self.max_completion_tokens = max_completion_tokens
 
     def clear_messages(self):
-        """Clear the message history."""
+        """Clear the message history and delete the conversation file if it exists."""
         self.messages = []
+        if self.conversation_file_path and os.path.exists(self.conversation_file_path):
+            try:
+                os.remove(self.conversation_file_path)
+                print(f"[LLMConnect] Conversation file deleted: {self.conversation_file_path}")
+            except IOError as e:
+                print(f"[LLMConnect] Error deleting conversation file {self.conversation_file_path}: {e}")
 
     def add_message(self, role: str, content: str):
-        """Add a message to the conversation history."""
+        """Add a message to the conversation history and save to file if tracking is enabled."""
         self.messages.append({"role": role, "content": content})
+        self._save_conversation_to_file()
 
     def prepare_request_data(self, prompt: Union[str, List[Dict[str, str]]], stream: bool = False) -> Dict[str, Any]:
         """Prepare the request data for the API call."""
+        # Always reload messages from file before preparing request to reflect external edits
+        if self.conversation_file_path:
+            self._load_conversation_from_file()
+
         if isinstance(prompt, str):
             # Add user message to history
             self.add_message("user", prompt)
@@ -153,10 +229,11 @@ class SyncAPIClient:
                  http_client: Optional[SyncHTTPClient] = None,
                  middleware: Optional[List[BaseMiddleware]] = None,
                  connection_pool: Optional[ConnectionPool] = None,
-                 retry_config: Optional[RetryConfig] = None):
+                 retry_config: Optional[RetryConfig] = None,
+                 window_id: Optional[int] = None):
 
         self._executor = APIExecutor(
-            api_key, base_url, model, endpoint, temperature, max_completion_tokens, timeout
+            api_key, base_url, model, endpoint, temperature, max_completion_tokens, timeout, window_id
         )
 
         # Use provided client or create a new one
@@ -273,10 +350,11 @@ class AsyncAPIClient:
                 http_client: Optional[AsyncHTTPClient] = None,
                 middleware: Optional[List[BaseMiddleware]] = None,
                 connection_pool: Optional[ConnectionPool] = None,
-                retry_config: Optional[RetryConfig] = None):
+                retry_config: Optional[RetryConfig] = None,
+                window_id: Optional[int] = None):
 
         self._executor = APIExecutor(
-            api_key, base_url, model, endpoint, temperature, max_completion_tokens, timeout
+            api_key, base_url, model, endpoint, temperature, max_completion_tokens, timeout, window_id
         )
 
         # Use provided client or create a new one

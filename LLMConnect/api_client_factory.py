@@ -93,6 +93,7 @@ class APIClientFactory:
         temperature: Optional[float] = None,
         max_completion_tokens: Optional[int] = None,
         timeout: Optional[float] = None,
+        window_id: Optional[int] = None,
         **kwargs
     ) -> SyncAPIClient:
         """Create a synchronous API client for the specified provider."""
@@ -112,6 +113,7 @@ class APIClientFactory:
             temperature=temperature or config.default_temperature,
             max_completion_tokens=max_completion_tokens or config.default_max_tokens,
             timeout=timeout or config.default_timeout,
+            window_id=window_id,
             **kwargs
         )
     
@@ -123,6 +125,7 @@ class APIClientFactory:
         temperature: Optional[float] = None,
         max_completion_tokens: Optional[int] = None,
         timeout: Optional[float] = None,
+        window_id: Optional[int] = None,
         **kwargs
     ) -> AsyncAPIClient:
         """Create an asynchronous API client for the specified provider."""
@@ -142,6 +145,7 @@ class APIClientFactory:
             temperature=temperature or config.default_temperature,
             max_completion_tokens=max_completion_tokens or config.default_max_tokens,
             timeout=timeout or config.default_timeout,
+            window_id=window_id,
             **kwargs
         )
     
@@ -173,12 +177,14 @@ def _make_sync_client_func(provider: Provider) -> Callable:
     def create_sync_client(
         model: Optional[str] = None,
         api_key: Optional[str] = None,
+        window_id: Optional[int] = None,
         **kwargs
     ) -> SyncAPIClient:
         return APIClientFactory.create_sync_client(
             provider=provider,
             model=model,
             api_key=api_key,
+            window_id=window_id,
             **kwargs
         )
     
@@ -188,6 +194,7 @@ def _make_sync_client_func(provider: Provider) -> Callable:
     create_sync_client.__annotations__ = {
         'model': Optional[str],
         'api_key': Optional[str],
+        'window_id': Optional[int],
         'return': SyncAPIClient
     }
     return create_sync_client
@@ -198,12 +205,14 @@ def _make_async_client_func(provider: Provider) -> Callable:
     def create_async_client(
         model: Optional[str] = None,
         api_key: Optional[str] = None,
+        window_id: Optional[int] = None,
         **kwargs
     ) -> AsyncAPIClient:
         return APIClientFactory.create_async_client(
             provider=provider,
             model=model,
             api_key=api_key,
+            window_id=window_id,
             **kwargs
         )
     
@@ -213,6 +222,7 @@ def _make_async_client_func(provider: Provider) -> Callable:
     create_async_client.__annotations__ = {
         'model': Optional[str],
         'api_key': Optional[str],
+        'window_id': Optional[int],
         'return': AsyncAPIClient
     }
     return create_async_client

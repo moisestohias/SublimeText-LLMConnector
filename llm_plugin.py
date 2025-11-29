@@ -17,7 +17,7 @@ def _get_or_create_client(window):
     if window_id not in _window_clients or _window_clients[window_id] is None:
         settings = sublime.load_settings('LLMPlugin.sublime-settings')
         client_config = settings.get('client_config', {})
-        _window_clients[window_id] = create_groq_sync_client(**client_config)
+        _window_clients[window_id] = create_groq_sync_client(window_id=window_id, **client_config)
     
     return _window_clients[window_id]
 
@@ -155,6 +155,20 @@ class LlmInsertTextCommand(sublime_plugin.TextCommand):
     """Helper command to insert text at a specific position."""
     def run(self, edit, point, text):
         self.view.insert(edit, point, text)
+
+class LlmDumpConversationCommand(sublime_plugin.WindowCommand):
+    def run(self):
+        try:
+            window = self.window
+            client = _get_or_create_client(window)
+            client._executor.dump_conversation_to_json()
+            sublime.status_message('LLM conversation dumped to JSON file')
+            
+            conversation_file_path = client._executor.conversation_file_path
+            if conversation_file_path and os.path.exists(conversation_file_path):
+                self.window.open_file(conversation_file_path)
+        except Exception as e:
+            sublime.error_message('LLM Dump Conversation Error: {0}'.format(str(e)))
 
 class LlmResetConversationCommand(sublime_plugin.ApplicationCommand):
     def run(self):
